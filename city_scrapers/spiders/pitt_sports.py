@@ -76,7 +76,7 @@ class PittSportsSpider(CityScrapersSpider):
 
                 date = datetime.datetime.strptime(new_date, '%b %d %Y %I:%M%p')  # convert to a date
                 item['date'] = date
-                print(item['date'])
+                return (item['date'])
 
             except:
                 # Style 2 - With time
@@ -91,7 +91,7 @@ class PittSportsSpider(CityScrapersSpider):
                     date = datetime.datetime.strptime(date, '%b %d %Y %I:%M%p')  # convert to a date
 
                     item = date
-                    print(item)
+                    return (item)
                 except Exception as e:
                     pass
 
@@ -125,9 +125,9 @@ class PittSportsSpider(CityScrapersSpider):
 
         for item in links_zipped:
             links = [{"href": item[0], "title": item[1]}]
-            print(links)
+            return (links)
 
-        return [{"href": "", "title": ""}]
+
 
     def _parse_source(self, response):
         """Parse or generate source."""
