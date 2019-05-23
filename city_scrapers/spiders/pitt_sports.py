@@ -1,6 +1,7 @@
 from city_scrapers_core.constants import NOT_CLASSIFIED
 from city_scrapers_core.items import Meeting
 from city_scrapers_core.spiders import CityScrapersSpider
+import scrapy
 import re
 from datetime import datetime
 
@@ -9,44 +10,48 @@ class PittSportsSpider(CityScrapersSpider):
     agency = "Sports and Exhibition Authority"
     timezone = "US/Eastern"
     allowed_domains = ["pgh-sea.com"]
-    start_urls = ["http://www.pgh-sea.com/schedule_sea.aspx?yr=2018"]
+    start_urls = ["http://www.pgh-sea.com/schedule_sea.aspx?yr=2011"]
+
+    def start_requests(self):
+        urls = ['http://www.pgh-sea.com/schedule_sea.aspx?yr=2011']
+        for url in urls:
+            yield scrapy.Request(url=url, callback=self.parse_years)
+
+    def parse_years(self, response):
+        links = response.xpath('//div[@class="projectlink"]/a/@href').extract()
+        return links
 
 
     def parse(self, response):
-        year_links = response.xpath('//div[@class="projectlink"]/a/@href').extract()
-
-        for year_link in year_links:
-            year_link = 'http://www.pgh-sea.com/' + year_link
-            year = CityScrapersSpider.Request(url=year_link, callback=self.parse2)
-            yield year
-
-    def parse2(self, response):
         """
         `parse` should always `yield` Meeting items.
 
         Change the `_parse_id`, `_parse_name`, etc methods to fit your scraping
         needs.
         """
-        # item = MeetingItem()
-        meetings = response.xpath('//tr[@class="ScheduleTextBold"]/td/text()').extract()[3:]
-        #print(item)
+        links = self.parse_years(response)
+        for link in links:
+            link = 'http://www.pgh-sea.com/' + link
+            yield scrapy.Request(url=link, callback=self.parse)
 
-        for item in meetings:
-            meeting = Meeting(
-                title=self._parse_title(item),
-                description=self._parse_description(item),
-                classification=self._parse_classification(item),
-                start=self._parse_start(item),
-                end=self._parse_end(item),
-                all_day=self._parse_all_day(item),
-                time_notes=self._parse_time_notes(item),
-                location=self._parse_location(item),
-                links=self._parse_links(item),
-                source=self._parse_source(response),
-            )
 
-            meeting["status"] = self._get_status(meeting)
-            meeting["id"] = self._get_id(meeting)
+            date_list = response.xpath('//tr[@class="ScheduleTextBold"]//text()').extract()[3:]
+            for item in date_list:
+                meeting = Meeting(
+                    title=self._parse_title(item),
+                    description=self._parse_description(item),
+                    classification=self._parse_classification(item),
+                    start=self._parse_start(item),
+                    end=self._parse_end(item),
+                    all_day=self._parse_all_day(item),
+                    time_notes=self._parse_time_notes(item),
+                    location=self._parse_location(item),
+                    links=self._parse_links(item),
+                    source=self._parse_source(response),
+                )
+
+                meeting["status"] = self._get_status(meeting)
+                meeting["id"] = self._get_id(meeting)
 
             yield meeting
 
@@ -64,38 +69,45 @@ class PittSportsSpider(CityScrapersSpider):
 
     def _parse_start(self, item):
         """Parse start datetime as a naive datetime object."""
-        for date in item:
-            # Style 1 - No time (not all the dates have times)
-            try:
-                day_year = date.split(', ')
-                day_year = day_year[1:]  # get the days and years
-                day = day_year[0]  # select the days
-                year = day_year[1]  # select the years
+        try:
+            date2 = re.sub(r'\s*--\s*$', '', item)
+            day_year = date2.split(', ')
+            day_year = day_year[1:]  # get the days and years
+            day = day_year[0]  # select the days
+            year = day_year[1]  # select the years
+            if '-- 1/1/1900 12:00:00 AM' in year:
+                year_time = year.split(' -- ')
+                # print('YEAR_TIME: ', year_time)
+                year = year_time[0][:4]
+                time = year_time[1]
+                if time == '1/1/1900 12:00:00 AM':
+                    time = '10:30AM'
+            else:
                 time = '10:30AM'  # using 10:30am as default time since that's what the website says
-                new_date = day + ' ' + year + ' ' + time  # concatenate the days and years
 
-                date = datetime.datetime.strptime(new_date, '%b %d %Y %I:%M%p')  # convert to a date
-                item['date'] = date
-                return (item['date'])
+            new_date = day + ' ' + year + ' ' + time  # concatenate the days and years
 
-            except:
-                # Style 2 - With time
-                try:
-                    date = date.split(', ')
-                    day = date[1]  # get the days
-                    year = date[2][:4]  # get the years
-                    time = date[2][8:].replace(' ', '')  # get the times
+            date = datetime.datetime.strptime(new_date, '%b %d %Y %I:%M%p')  # convert to a date
+            return date
+        except:
+            # Style 2 - With time
+            try:
+                date = date.split(', ')
+                # print("Style2 - DATE: ", date)
+                day = date[1]  # get the days
+                year = date[2][:4]  # get the years
+                time = date[2][8:].replace(' ', '')  # get the times
 
-                    date = day + ' ' + year + ' ' + time  # concatenate the days, years, and times together
+                date = day + ' ' + year + ' ' + time  # concatenate the days, years, and times together
 
-                    date = datetime.datetime.strptime(date, '%b %d %Y %I:%M%p')  # convert to a date
+                date = datetime.datetime.strptime(date, '%b %d %Y %I:%M%p')  # convert to a date
 
-                    item = date
-                    return (item)
-                except Exception as e:
-                    pass
+                return date
 
-        return item
+            except Exception as e:
+                pass
+
+        return date
 
     def _parse_end(self, item):
         """Parse end datetime as a naive datetime object. Added by pipeline if None"""
@@ -125,7 +137,7 @@ class PittSportsSpider(CityScrapersSpider):
 
         for item in links_zipped:
             links = [{"href": item[0], "title": item[1]}]
-            return (links)
+            return links
 
 
 
