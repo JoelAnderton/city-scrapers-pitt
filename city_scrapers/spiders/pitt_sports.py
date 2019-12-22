@@ -3,7 +3,7 @@ from city_scrapers_core.items import Meeting
 from city_scrapers_core.spiders import CityScrapersSpider
 import scrapy
 import re
-from datetime import datetime
+import datetime
 
 class PittSportsSpider(CityScrapersSpider):
     name = "pitt_sports"
@@ -69,6 +69,7 @@ class PittSportsSpider(CityScrapersSpider):
 
     def _parse_start(self, item):
         """Parse start datetime as a naive datetime object."""
+        date = datetime.datetime(1975, 1, 1)
         try:
             date2 = re.sub(r'\s*--\s*$', '', item)
             day_year = date2.split(', ')
@@ -128,16 +129,9 @@ class PittSportsSpider(CityScrapersSpider):
             "name": "David L. Lawrence Convention Center Room 333",
         }
 
-    def _parse_links(self, response):
+    def _parse_links(self, item):
         """Parse or generate links."""
-
-        link = response.xpath('//a[@class="ScheduleTextBold"]/@href').extract()[3:]
-        link_text = response.xpath('//a[@class="ScheduleTextBold"]/text()').extract()[3:]
-        links_zipped = zip(link, link_text)
-
-        for item in links_zipped:
-            links = [{"href": item[0], "title": item[1]}]
-            return links
+        return [{"href": "", "title": ""}]
 
 
 
